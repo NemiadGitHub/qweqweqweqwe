@@ -3840,46 +3840,38 @@ public static class GMShapeToSVG
 #region Main Resource Dumpers
 
 #region Dump Resources
-void DumpResource(dynamic asset, int index, string type, bool allowdump)
+async Task DumpResources<T>(IList<T> AssetChunk, Func<T, string> GetAssetName, Action<T, int> DumpFunc, string AssetType, bool isEnabled)
 {
-    if (asset is null)
+    if (isEnabled || UISettings.CSTM_Enable)
     {
-        r_num++;
-        return;
-    }
-    if (allowdump || (UISettings.CSTM_Enable && UISettings.CSTM.Contains(asset.Name.Content)))
-    {
-        r_num++;
-        SetProgressBar(null, $"Exporting {type}: {asset.Name.Content}", r_num, toDump);
+        var watch = Stopwatch.StartNew();
+        PushToLog($"Dumping {AssetType}s...");
 
-        var assetWatch = Stopwatch.StartNew();
-        if (UISettings.LOG)
-            PushToLog($"Dumping {type} '{asset.Name.Content}'...");
-
-        // find what resource dump function to use
-        Action<dynamic, int> DumpFunc = type switch
+        await Task.Run(() => Parallel.ForEach(AssetChunk, parallelOptions, (asset, state, index) => 
         {
-            "Script" => ((_a, _i) => DumpScript(_a, _i)),
-            "Object" => ((_a, _i) => DumpObject(_a, _i)),
-            "Sound" => ((_a, _i) => DumpSound(_a, _i)),
-            "Room" => ((_a, _i) => DumpRoom(_a, _i)),
-            "Sprite" => ((_a, _i) => DumpSprite(_a, _i)),
-            "Font" => ((_a, _i) => DumpFont(_a, _i)),
-            "Sequence" => ((_a, _i) => DumpSequence(_a, _i)),
-            "Shader" => ((_a, _i) => DumpShader(_a, _i)),
-            "Extension" => ((_a, _i) => DumpExtension(_a, _i)),
-            "Path" => ((_a, _i) => DumpPath(_a, _i)),
-            "Animation Curve" => ((_a, _i) => DumpAnimCurve(_a, _i)),
-            "Tileset" => ((_a, _i) => DumpTileSet(_a, _i)),
-            "Timeline" => ((_a, _i) => DumpTimeline(_a, _i))
-        };
+            r_num++;
+            if (asset is null) return;
 
-        // execute correct dump function
-        DumpFunc(asset, index);
+            string assetName = GetAssetName(asset); // i hate using GetAssetName, but var asset is unusable in this context
+            if (isEnabled || (UISettings.CSTM_Enable && UISettings.CSTM.Contains(assetName)))
+            {
+                SetProgressBar(null, $"Exporting {AssetType}: {assetName}", r_num, toDump);
 
-        assetWatch.Stop();
-        if (UISettings.LOG)
-            PushToLog($"{type} '{asset.Name.Content}' successfully dumped in {assetWatch.ElapsedMilliseconds} ms.");
+                var assetWatch = Stopwatch.StartNew();
+                if (UISettings.LOG)
+                    PushToLog($"Dumping {AssetType} '{assetName}'...");
+
+                // execute correct dump function
+                DumpFunc(asset, (int)index);
+
+                assetWatch.Stop();
+                if (UISettings.LOG)
+                    PushToLog($"{AssetType} '{assetName}' successfully dumped in {assetWatch.ElapsedMilliseconds} ms.");
+            }
+        }));
+
+        watch.Stop();
+        PushToLog($"{AssetType}s complete! Took {watch.ElapsedMilliseconds} ms");
     }
 }
 #endregion
@@ -3908,20 +3900,6 @@ void DumpScript(UndertaleScript s, int index)
     CreateProjectResource(GMAssetType.Script, scriptName, index);
 
     IncrementProgressParallel();
-}
-async Task DumpScripts()
-{
-    if (UISettings.SCPT || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Scripts...");
-
-        await Task.Run(() => Parallel.ForEach(scriptsToDump, parallelOptions, 
-            (scr, state, index) => DumpResource(scr, (int)index, "Script", UISettings.SCPT)));
-
-        watch.Stop();
-        PushToLog($"Scripts complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 #region Objects
@@ -4079,23 +4057,9 @@ void DumpObject(UndertaleGameObject o, int index)
 
     IncrementProgressParallel();
 }
-async Task DumpObjects()
-{
-    if (UISettings.OBJT || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Objects...");
-
-        await Task.Run(() => Parallel.ForEach(Data.GameObjects, parallelOptions,
-            (obj, state, index) => DumpResource(obj, (int)index, "Object", UISettings.OBJT)));
-
-        watch.Stop();
-        PushToLog($"Objects complete! Took {watch.ElapsedMilliseconds} ms");
-    }
-}
 #endregion
 #region Sounds
-public void DumpSound(UndertaleSound s, int index)
+void DumpSound(UndertaleSound s, int index)
 {
     string soundName = ((s?.Name?.Content != null || s.Name.Content != "") ? s.Name.Content : $"Unknown_Sound_{index}");
     string assetDir = $"{scriptDir}sounds\\{soundName}\\";
@@ -4259,20 +4223,6 @@ public void DumpSound(UndertaleSound s, int index)
     CreateProjectResource(GMAssetType.Sound, soundName, index);
 
     IncrementProgressParallel();
-}
-async Task DumpSounds()
-{
-    if (UISettings.SOND || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Sounds...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Sounds, parallelOptions,
-            (snd, state, index) => DumpResource(snd, (int)index, "Sound", UISettings.SOND)));
-
-        watch.Stop();
-        PushToLog($"Sounds complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 #region Rooms
@@ -4607,23 +4557,6 @@ void DumpRoom(UndertaleRoom r, int index)
     CreateProjectResource(GMAssetType.Room, roomName, index);
 
     IncrementProgressParallel();
-}
-async Task DumpRooms()
-{
-    if (UISettings.ROOM || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Rooms...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Rooms, parallelOptions,
-            (rm, state, index) => DumpResource(rm, (int)index, "Room", UISettings.ROOM)));
-
-        // room nodes
-        finalExport.RoomOrderNodes = Data.GeneralInfo.RoomOrder.Select(r => new GMProject.RoomOrderNode(r.Resource.Name.Content)).ToArray();
-
-        watch.Stop();
-        PushToLog($"Rooms complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 #region Sprites
@@ -4972,20 +4905,6 @@ void DumpSprite(UndertaleSprite s, int index)
 
     IncrementProgressParallel();
 }
-async Task DumpSprites()
-{
-    if (UISettings.SPRT || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Sprites...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Sprites, parallelOptions,
-            (spr, state, index) => DumpResource(spr, (int)index, "Sprite", UISettings.SPRT)));
-
-        watch.Stop();
-        PushToLog($"Sprites complete! Took {watch.ElapsedMilliseconds} ms");
-    }
-}
 #endregion
 #region Fonts
 void DumpFont(UndertaleFont f, int index)
@@ -5060,20 +4979,6 @@ void DumpFont(UndertaleFont f, int index)
     CreateProjectResource(GMAssetType.Font, fontName, index);
 
     IncrementProgressParallel();
-}
-async Task DumpFonts()
-{
-    if (UISettings.FONT || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Fonts...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Fonts, parallelOptions,
-            (fnt, state, index) => DumpResource(fnt, (int)index, "Font", UISettings.FONT)));
-
-        watch.Stop();
-        PushToLog($"Fonts complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 #region Sequences
@@ -5530,20 +5435,6 @@ void DumpSequence(UndertaleSequence s, int index)
 
     IncrementProgressParallel();
 }
-async Task DumpSequences()
-{
-    if (UISettings.SEQN || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Sequences...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Sequences, parallelOptions,
-            (seq, state, index) => DumpResource(seq, (int)index, "Sequence", UISettings.SEQN)));
-
-        watch.Stop();
-        PushToLog($"Sequences complete! Took {watch.ElapsedMilliseconds} ms");
-    }
-}
 #endregion
 #region Shaders
 void DumpShader(UndertaleShader s, int index)
@@ -5585,20 +5476,6 @@ void DumpShader(UndertaleShader s, int index)
     CreateProjectResource(GMAssetType.Shader, shaderName, index);
 
     IncrementProgressParallel();
-}
-async Task DumpShaders()
-{
-    if (UISettings.SHDR || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Shaders...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Shaders, parallelOptions,
-            (shd, state, index) => DumpResource(shd, (int)index, "Shader", UISettings.SHDR)));
-
-        watch.Stop();
-        PushToLog($"Shaders complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 #region Extensions
@@ -5721,84 +5598,6 @@ void DumpExtension(UndertaleExtension e, int index)
 
     IncrementProgressParallel();
 }
-async Task DumpExtensions()
-{
-    if (UISettings.EXTN || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Extensions...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Extensions, parallelOptions,
-            (ext, state, index) => DumpResource(ext, (int)index, "Extension", UISettings.EXTN)));
-
-        #region Decompiler Generated Extension
-
-        if (!extensionGML.ContainsKey("DecompiledGMLExtension"))
-            return;
-
-        string extensionName = "DecompiledExtension";
-        string assetDir = $"{scriptDir}extensions\\{extensionName}\\";
-
-        Directory.CreateDirectory(assetDir);
-        // create gml func extension
-        GMExtension gmlExtension = new(extensionName)
-        {
-            classname = extensionName,
-            parent = new AssetReference(extensionName, GMAssetType.Extension)
-            {
-                name = "DecompilerGenerated",
-                path = "folders/DecompilerGenerated.yy"
-            }
-        };
-        GMExtension.GMExtensionFile extensionFile = new()
-        {
-            filename = extensionName + "GML"
-        };
-        foreach (string func in extensionGML["DecompiledGMLExtension"])
-        {
-            string firstLine = func.Split('\n')[0];
-            int index = "#define ".Length;
-            string funcName = firstLine.Substring(index, firstLine.Length - index);
-
-            if (funcName.Contains("init"))
-                extensionFile.init = funcName;
-            // arg count
-            Regex regex = new Regex(@"argument(\d+)");
-
-            int argCount = regex.Matches(func)
-                .Cast<Match>()
-                .Select(m => int.Parse(m.Groups[1].Value))
-                .DefaultIfEmpty(0) // Handle case where no matches are found
-                .Max();
-
-            if (func.Contains("argument["))
-                argCount = -1;
-
-            extensionFile.functions.Add(
-                new GMExtension.GMExtensionFunction(funcName)
-                {
-                    externalName = funcName,
-                    kind = 11, // taken from gameframe, might not be right.
-                    returnType = 2, // asl taken from gameframe
-                    argCount = argCount,
-                    args = new int[0]
-                });
-        }
-        gmlExtension.files.Add(extensionFile);
-
-        File.WriteAllText($"{assetDir}{extensionName}.yy", JsonSerializer.Serialize(gmlExtension, jsonOptions));
-        File.WriteAllText($"{assetDir}{extensionName}GML.gml", String.Join('\n', extensionGML["DecompiledGMLExtension"]));
-
-        CreateProjectResource(GMAssetType.Extension, extensionName, Data.Extensions.Count + 1);
-
-        IncrementProgressParallel();
-
-        #endregion
-
-        watch.Stop();
-        PushToLog($"Extensions complete! Took {watch.ElapsedMilliseconds} ms");
-    }
-}
 #endregion
 #region Paths
 void DumpPath(UndertalePath p, int index)
@@ -5824,20 +5623,6 @@ void DumpPath(UndertalePath p, int index)
     CreateProjectResource(GMAssetType.Path, pathName, index);
 
     IncrementProgressParallel();
-}
-async Task DumpPaths()
-{
-    if (UISettings.PATH || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Paths...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Paths, parallelOptions,
-            (pth, state, index) => DumpResource(pth, (int)index, "Path", UISettings.PATH)));
-
-        watch.Stop();
-        PushToLog($"Paths complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 #region Anim Curves
@@ -5874,20 +5659,6 @@ void DumpAnimCurve(UndertaleAnimationCurve c, int index)
     CreateProjectResource(GMAssetType.AnimationCurve, curveName, index);
 
     IncrementProgressParallel();
-}
-async Task DumpAnimCurves()
-{
-    if (UISettings.ACRV || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog($"Dumping Animation Curves...");
-
-        await Task.Run(() => Parallel.ForEach(Data.AnimationCurves, parallelOptions,
-            (cur, state, index) => DumpResource(cur, (int)index, "Animation Curve", UISettings.ACRV)));
-
-        watch.Stop();
-        PushToLog($"Animation Curves complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 #region Tile Sets
@@ -6104,20 +5875,6 @@ void DumpTileSet(UndertaleBackground t, int index)
 
     IncrementProgressParallel();
 }
-async Task DumpTileSets()
-{
-    if (UISettings.BGND || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog($"Dumping Tilesets...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Backgrounds, parallelOptions,
-            (ts, state, index) => DumpResource(ts, (int)index, "Tileset", UISettings.BGND)));
-
-        watch.Stop();
-        PushToLog($"Tilesets complete! Took {watch.ElapsedMilliseconds} ms");
-    }
-}
 #endregion
 #region Timeline
 void DumpTimeline(UndertaleTimeline t, int index)
@@ -6159,20 +5916,6 @@ void DumpTimeline(UndertaleTimeline t, int index)
 
     IncrementProgressParallel();
 
-}
-async Task DumpTimelines()
-{
-    if (UISettings.TMLN || UISettings.CSTM_Enable)
-    {
-        var watch = Stopwatch.StartNew();
-        PushToLog("Dumping Timelines...");
-
-        await Task.Run(() => Parallel.ForEach(Data.Timelines, parallelOptions,
-            (tl, state, index) => DumpResource(tl, (int)index, "Timeline", UISettings.TMLN)));
-
-        watch.Stop();
-        PushToLog($"Timelines complete! Took {watch.ElapsedMilliseconds} ms");
-    }
 }
 #endregion
 
@@ -6407,6 +6150,12 @@ GMProject finalExport = new(Data.GeneralInfo.Name.Content)
     Folders = CreateProjectFolders()
 };
 
+// room nodes
+finalExport.RoomOrderNodes =
+    (UISettings.CSTM.Count > 0 && UISettings.CSTM_Enable)
+    ? Data.GeneralInfo.RoomOrder.Where(r => UISettings.CSTM.Contains(r.Resource.Name.Content)).Select(r => new GMProject.RoomOrderNode(r.Resource.Name.Content)).ToArray()
+    : Data.GeneralInfo.RoomOrder.Select(r => new GMProject.RoomOrderNode(r.Resource.Name.Content)).ToArray();
+
 finalExport.MetaData.IDEVersion = $"{Data.GeneralInfo.Major}.{Data.GeneralInfo.Minor}.{Data.GeneralInfo.Release}.{Data.GeneralInfo.Build}";
 
 // add compile config if the data.win's isn't Default
@@ -6480,23 +6229,24 @@ SetProgressBar(null, "Exporting Assets...", 0, toDump);
 StartProgressBarUpdater();
 SetUMTConsoleText("Running Decompiler...");
 
+Func<dynamic, string> GetName = a => a.Name.Content; // lambda because yeah
 await Task.WhenAll(
     DumpDatafiles(),
     DumpOptions(),
 
-    DumpScripts(),
-    DumpObjects(),
-    DumpSounds(),
-    DumpRooms(),
-    DumpSprites(),
-    DumpFonts(),
-    DumpShaders(),
-    DumpExtensions(),
-    DumpPaths(),
-    DumpAnimCurves(),
-    DumpTileSets(),
-    DumpSequences(),
-    DumpTimelines()
+    DumpResources<UndertaleScript>(scriptsToDump, GetName, (a, i) => DumpScript(a, i), "Script", UISettings.SCPT),
+    DumpResources<UndertaleGameObject>(Data.GameObjects, GetName, (a, i) => DumpObject(a, i), "Object", UISettings.OBJT),
+    DumpResources<UndertaleSound>(Data.Sounds, GetName, (a, i) => DumpSound(a, i), "Sound", UISettings.SOND),
+    DumpResources<UndertaleRoom>(Data.Rooms, GetName, (a, i) => DumpRoom(a, i), "Room", UISettings.ROOM),
+    DumpResources<UndertaleSprite>(Data.Sprites, GetName, (a, i) => DumpSprite(a, i), "Sprite", UISettings.SPRT),
+    DumpResources<UndertaleFont>(Data.Fonts, GetName, (a, i) => DumpFont(a, i), "Font", UISettings.FONT),
+    DumpResources<UndertaleSequence>(Data.Sequences, GetName, (a, i) => DumpSequence(a, i), "Sequence", UISettings.SEQN),
+    DumpResources<UndertaleShader>(Data.Shaders, GetName, (a, i) => DumpShader(a, i), "Shader", UISettings.SHDR),
+    DumpResources<UndertaleExtension>(Data.Extensions, GetName, (a, i) => DumpExtension(a, i), "Extension", UISettings.EXTN),
+    DumpResources<UndertalePath>(Data.Paths, GetName, (a, i) => DumpPath(a, i), "Path", UISettings.PATH),
+    DumpResources<UndertaleAnimationCurve>(Data.AnimationCurves, GetName, (a, i) => DumpAnimCurve(a, i), "Animation Curve", UISettings.ACRV),
+    DumpResources<UndertaleBackground>(Data.Backgrounds, GetName, (a, i) => DumpTileSet(a, i), "Tileset", UISettings.BGND),
+    DumpResources<UndertaleTimeline>(Data.Timelines, GetName, (a, i) => DumpTimeline(a, i), "Timeline", UISettings.TMLN)
 );
 
 await StopProgressBarUpdater();
@@ -6513,6 +6263,67 @@ if (imagesToDump.Count > 0)
 
     await StopProgressBarUpdater();
     HideProgressBar();
+}
+#endregion
+#region Dump Decompiled Extension
+if (UISettings.EXTN) 
+{
+    if (!extensionGML.ContainsKey("DecompiledGMLExtension"))
+        return;
+
+    string extensionName = "DecompiledExtension";
+    string extensionDir = $"{scriptDir}extensions\\{extensionName}\\";
+
+    Directory.CreateDirectory(extensionDir);
+    // create gml func extension
+    GMExtension gmlExtension = new(extensionName)
+    {
+        classname = extensionName,
+        parent = new AssetReference(extensionName, GMAssetType.Extension)
+        {
+            name = "DecompilerGenerated",
+            path = "folders/DecompilerGenerated.yy"
+        }
+    };
+    GMExtension.GMExtensionFile extensionFile = new() { filename = extensionName + "GML" };
+
+    foreach (string func in extensionGML["DecompiledGMLExtension"])
+    {
+        string firstLine = func.Split('\n')[0];
+        int index = "#define ".Length;
+        string funcName = firstLine.Substring(index, firstLine.Length - index);
+
+        if (funcName.Contains("init"))
+            extensionFile.init = funcName;
+
+        // arg count
+        Regex regex = new(@"argument(\d+)");
+
+        int argCount = regex.Matches(func)
+            .Cast<Match>()
+            .Select(m => int.Parse(m.Groups[1].Value))
+            .DefaultIfEmpty(0) // Handle case where no matches are found
+            .Max();
+
+        if (func.Contains("argument["))
+            argCount = -1;
+
+        extensionFile.functions.Add(
+            new GMExtension.GMExtensionFunction(funcName)
+            {
+                externalName = funcName,
+                kind = 11, // taken from gameframe, might not be right.
+                returnType = 2, // asl taken from gameframe
+                argCount = argCount,
+                args = new int[0]
+            });
+    }
+    gmlExtension.files.Add(extensionFile);
+
+    File.WriteAllText($"{extensionDir}{extensionName}.yy", JsonSerializer.Serialize(gmlExtension, jsonOptions));
+    File.WriteAllText($"{extensionDir}{extensionName}GML.gml", String.Join('\n', extensionGML["DecompiledGMLExtension"]));
+
+    CreateProjectResource(GMAssetType.Extension, extensionName, Data.Extensions.Count + 1);
 }
 #endregion
 #region README Note
