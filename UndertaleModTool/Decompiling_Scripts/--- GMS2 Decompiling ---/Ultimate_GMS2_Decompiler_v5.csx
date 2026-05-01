@@ -3840,7 +3840,7 @@ public static class GMShapeToSVG
 #region Main Resource Dumpers
 
 #region Dump Resources
-async Task DumpResources<T>(IList<T> AssetChunk, Func<T, string> GetAssetName, Action<T, int> DumpFunc, string AssetType, bool isEnabled)
+async Task DumpResources<T>(IList<T> AssetChunk, Action<T, int> DumpFunc, string AssetType, bool isEnabled)
 {
     if (isEnabled || UISettings.CSTM_Enable)
     {
@@ -3852,7 +3852,10 @@ async Task DumpResources<T>(IList<T> AssetChunk, Func<T, string> GetAssetName, A
             r_num++;
             if (asset is null) return;
 
-            string assetName = GetAssetName(asset); // i hate using GetAssetName, but var asset is unusable in this context
+            // var asset is technecally of an unknown type in this context
+            // which means that we can't access any of its properties here (until it goes into the dump func)
+            // so the only way to get the name is to cast it to a common class with the name property
+            string assetName = ((UndertaleNamedResource)asset).Name.Content;
             if (isEnabled || (UISettings.CSTM_Enable && UISettings.CSTM.Contains(assetName)))
             {
                 SetProgressBar(null, $"Exporting {AssetType}: {assetName}", r_num, toDump);
@@ -6229,24 +6232,23 @@ SetProgressBar(null, "Exporting Assets...", 0, toDump);
 StartProgressBarUpdater();
 SetUMTConsoleText("Running Decompiler...");
 
-Func<dynamic, string> GetName = a => a.Name.Content; // lambda because yeah
 await Task.WhenAll(
     DumpDatafiles(),
     DumpOptions(),
 
-    DumpResources<UndertaleScript>(scriptsToDump, GetName, (a, i) => DumpScript(a, i), "Script", UISettings.SCPT),
-    DumpResources<UndertaleGameObject>(Data.GameObjects, GetName, (a, i) => DumpObject(a, i), "Object", UISettings.OBJT),
-    DumpResources<UndertaleSound>(Data.Sounds, GetName, (a, i) => DumpSound(a, i), "Sound", UISettings.SOND),
-    DumpResources<UndertaleRoom>(Data.Rooms, GetName, (a, i) => DumpRoom(a, i), "Room", UISettings.ROOM),
-    DumpResources<UndertaleSprite>(Data.Sprites, GetName, (a, i) => DumpSprite(a, i), "Sprite", UISettings.SPRT),
-    DumpResources<UndertaleFont>(Data.Fonts, GetName, (a, i) => DumpFont(a, i), "Font", UISettings.FONT),
-    DumpResources<UndertaleSequence>(Data.Sequences, GetName, (a, i) => DumpSequence(a, i), "Sequence", UISettings.SEQN),
-    DumpResources<UndertaleShader>(Data.Shaders, GetName, (a, i) => DumpShader(a, i), "Shader", UISettings.SHDR),
-    DumpResources<UndertaleExtension>(Data.Extensions, GetName, (a, i) => DumpExtension(a, i), "Extension", UISettings.EXTN),
-    DumpResources<UndertalePath>(Data.Paths, GetName, (a, i) => DumpPath(a, i), "Path", UISettings.PATH),
-    DumpResources<UndertaleAnimationCurve>(Data.AnimationCurves, GetName, (a, i) => DumpAnimCurve(a, i), "Animation Curve", UISettings.ACRV),
-    DumpResources<UndertaleBackground>(Data.Backgrounds, GetName, (a, i) => DumpTileSet(a, i), "Tileset", UISettings.BGND),
-    DumpResources<UndertaleTimeline>(Data.Timelines, GetName, (a, i) => DumpTimeline(a, i), "Timeline", UISettings.TMLN)
+    DumpResources<UndertaleScript>(scriptsToDump, (a, i) => DumpScript(a, i), "Script", UISettings.SCPT),
+    DumpResources<UndertaleGameObject>(Data.GameObjects, (a, i) => DumpObject(a, i), "Object", UISettings.OBJT),
+    DumpResources<UndertaleSound>(Data.Sounds, (a, i) => DumpSound(a, i), "Sound", UISettings.SOND),
+    DumpResources<UndertaleRoom>(Data.Rooms, (a, i) => DumpRoom(a, i), "Room", UISettings.ROOM),
+    DumpResources<UndertaleSprite>(Data.Sprites, (a, i) => DumpSprite(a, i), "Sprite", UISettings.SPRT),
+    DumpResources<UndertaleFont>(Data.Fonts, (a, i) => DumpFont(a, i), "Font", UISettings.FONT),
+    DumpResources<UndertaleSequence>(Data.Sequences, (a, i) => DumpSequence(a, i), "Sequence", UISettings.SEQN),
+    DumpResources<UndertaleShader>(Data.Shaders, (a, i) => DumpShader(a, i), "Shader", UISettings.SHDR),
+    DumpResources<UndertaleExtension>(Data.Extensions, (a, i) => DumpExtension(a, i), "Extension", UISettings.EXTN),
+    DumpResources<UndertalePath>(Data.Paths, (a, i) => DumpPath(a, i), "Path", UISettings.PATH),
+    DumpResources<UndertaleAnimationCurve>(Data.AnimationCurves, (a, i) => DumpAnimCurve(a, i), "Animation Curve", UISettings.ACRV),
+    DumpResources<UndertaleBackground>(Data.Backgrounds, (a, i) => DumpTileSet(a, i), "Tileset", UISettings.BGND),
+    DumpResources<UndertaleTimeline>(Data.Timelines, (a, i) => DumpTimeline(a, i), "Timeline", UISettings.TMLN)
 );
 
 await StopProgressBarUpdater();
@@ -6266,11 +6268,8 @@ if (imagesToDump.Count > 0)
 }
 #endregion
 #region Dump Decompiled Extension
-if (UISettings.EXTN) 
+if (UISettings.EXTN && extensionGML.ContainsKey("DecompiledGMLExtension")) 
 {
-    if (!extensionGML.ContainsKey("DecompiledGMLExtension"))
-        return;
-
     string extensionName = "DecompiledExtension";
     string extensionDir = $"{scriptDir}extensions\\{extensionName}\\";
 
